@@ -1,0 +1,5 @@
+{
+  "name": "SnapDrop Pro",
+  "description": "A premium, high-performance peer-to-peer file transfer web app using WebRTC and WebSockets.",
+  "requestFramePermissions": []
+}
