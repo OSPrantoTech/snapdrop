@@ -35,7 +35,7 @@ export class WebRTCManager {
   private peerConnection: RTCPeerConnection | null = null;
   private dataChannel: RTCDataChannel | null = null;
   private roomId: string;
-  private isInitiator: boolean;
+  public isInitiator: boolean;
   private targetSocketId: string | null = null;
 
   public onStateChange?: (state: PeerConnectionState) => void;
