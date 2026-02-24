@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Send, Download, Zap, Shield, Wifi, Share2, X, File as FileIcon, CheckCircle2 } from 'lucide-react';
 import { v4 as uuidv4 } from 'uuid';
 import { QRCodeSVG } from 'qrcode.react';
+import { Html5QrcodeScanner, Html5QrcodeResult } from 'html5-qrcode';
 import { WebRTCManager, FileMetadata, TransferProgress } from './lib/webrtc';
 import { formatBytes, formatTime, cn } from './lib/utils';
 
@@ -23,6 +24,44 @@ export default function App() {
   
   // Shared state
   const [progress, setProgress] = useState<Record<string, TransferProgress>>({});
+  const [isScanning, setIsScanning] = useState(false);
+  const [manualSessionId, setManualSessionId] = useState('');
+
+  useEffect(() => {
+    let scanner: Html5QrcodeScanner | null = null;
+
+    if (isScanning) {
+      scanner = new Html5QrcodeScanner(
+        'qr-reader',
+        {
+          fps: 10,
+          qrbox: { width: 250, height: 250 },
+          rememberLastUsedCamera: true,
+          supportedScanTypes: [],
+        },
+        false
+      );
+
+      const onScanSuccess = (decodedText: string, decodedResult: Html5QrcodeResult) => {
+        const url = new URL(decodedText);
+        const session = url.searchParams.get('session');
+        if (session) {
+          handleJoinSession(session.toLowerCase());
+          setIsScanning(false);
+        }
+      };
+
+      scanner.render(onScanSuccess, undefined);
+    }
+
+    return () => {
+      if (scanner) {
+        scanner.clear().catch(error => {
+          console.error('Failed to clear html5-qrcode-scanner.', error)
+        });
+      }
+    };
+  }, [isScanning]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -355,41 +394,60 @@ export default function App() {
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}
               exit={{ opacity: 0, scale: 0.95 }}
-              className="w-full max-w-md bg-white/5 border border-white/10 rounded-3xl p-8 backdrop-blur-xl"
+              className="w-full max-w-md bg-white/5 border border-white/10 rounded-3xl p-4 sm:p-8 backdrop-blur-xl"
             >
-              <div className="flex justify-between items-center mb-8">
-                <h2 className="text-2xl font-semibold">Join Session</h2>
+              <div className="flex justify-between items-center mb-6">
+                <h2 className="text-2xl font-semibold">Receive Files</h2>
                 <button onClick={cancelSession} className="p-2 hover:bg-white/10 rounded-full transition-colors">
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              <div className="flex flex-col gap-6">
+              {isScanning ? (
                 <div>
-                  <label className="block text-sm text-zinc-400 mb-2">Enter Session ID</label>
-                  <input
-                    type="text"
-                    maxLength={8}
-                    className="w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-xl sm:text-2xl font-mono text-center uppercase tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
-                    placeholder="XXXXXXXX"
-                    onChange={(e) => {
-                      if (e.target.value.length === 8) {
-                        handleJoinSession(e.target.value.toLowerCase());
-                      }
-                    }}
-                  />
+                  <div id="qr-reader" className="w-full rounded-lg overflow-hidden"></div>
+                  <button onClick={() => setIsScanning(false)} className="w-full mt-4 py-2 bg-white/10 rounded-lg text-center">
+                    Cancel
+                  </button>
                 </div>
+              ) : (
+                <div className="flex flex-col gap-4">
+                  <button 
+                    onClick={() => setIsScanning(true)}
+                    className="w-full flex items-center justify-center gap-3 px-6 py-4 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl font-medium transition-colors"
+                  >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+                    <span>Scan QR Code</span>
+                  </button>
 
-                <div className="relative flex items-center py-4">
-                  <div className="flex-grow border-t border-white/10"></div>
-                  <span className="flex-shrink-0 mx-4 text-zinc-500 text-sm">OR</span>
-                  <div className="flex-grow border-t border-white/10"></div>
+                  <div className="relative flex items-center py-2">
+                    <div className="flex-grow border-t border-white/10"></div>
+                    <span className="flex-shrink-0 mx-4 text-zinc-500 text-sm">OR</span>
+                    <div className="flex-grow border-t border-white/10"></div>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm text-zinc-400 mb-2">Enter Session ID</label>
+                    <div className="flex gap-2">
+                      <input
+                        type="text"
+                        maxLength={8}
+                        value={manualSessionId}
+                        onChange={(e) => setManualSessionId(e.target.value.toUpperCase())}
+                        className="flex-grow w-full bg-black/50 border border-white/10 rounded-xl px-4 py-3 text-xl sm:text-2xl font-mono text-center uppercase tracking-widest focus:outline-none focus:border-indigo-500 transition-colors"
+                        placeholder="XXXXXXXX"
+                      />
+                      <button 
+                        onClick={() => handleJoinSession(manualSessionId.toLowerCase())}
+                        disabled={manualSessionId.length !== 8 || connectionState === 'connecting'}
+                        className="px-5 py-3 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-medium transition-colors disabled:bg-zinc-700 disabled:text-zinc-500"
+                      >
+                        {connectionState === 'connecting' ? '...' : <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="9 10 4 15 9 20"/><path d="M20 4v7a4 4 0 0 1-4 4H4"/></svg>}
+                      </button>
+                    </div>
+                  </div>
                 </div>
-
-                <p className="text-sm text-zinc-500 text-center">
-                  Open the link shared by the sender to connect automatically.
-                </p>
-              </div>
+              )}
             </motion.div>
           )}
 
